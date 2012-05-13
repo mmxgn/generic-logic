@@ -1,0 +1,13 @@
+Generic Logic-Based stuff.
+
+Two files for the moment:
+
+testlgg.oz -->  Some test functions about the generalization
+		operator in oz.
+
+logic.oz  -->    Some simple classes for a Propositional Clausal Logic
+                 model searcher and theorem prover.
+
+logic2.oz -->    Some simple classes for a Relational Clausal Logic
+                 model searcher and theorem prover.
+

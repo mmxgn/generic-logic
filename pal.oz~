@@ -1,0 +1,11 @@
+L = [f1 f2 f3 f4 f5]
+{Browse {SearchOne
+ proc {$ Sol}
+    {Member f1 L}
+    {Member f2 L}
+    Sol=rule(f1 f2)
+ end
+}}
+
+	      
+ 

@@ -8,6 +8,13 @@ declare
 %% Helper Functions
 
 
+%% Question
+% If S1 = {X|A} and S2 = {X|B}
+% are unifiers of S, then S3 = {X|A, X|B} is a unifier of S?
+
+
+
+
 fun {Substitute L Orig Repl}
    % Substitutions
    %
@@ -55,20 +62,88 @@ fun {Subst Expr S}
    end
 end
 
+fun {SubstNR Expr S B}
+   case S of
+      P#Q then
+      if {Substitute Expr P Q} == Expr then
+	 B = false
+	 Expr
+      else
+	 B = true
+	 {Substitute Expr P Q}
+      end
+   else
+      B = false
+      Expr
+   end
+end
+
 fun {Subst2 Expr S}
    % Same as Subst2, with the exception
    % that S is a list of substitutions.
    case S of
       H|T then
-      {Subst2 {Subst Expr H} T}
+      S SD in
+      S = {Subst Expr H}
+     % SD = {SetDifference S SD}
+      
+      {Subst2 S T}
    []
       P#Q then
       {Substitute Expr P Q}
    else
       Expr
    end
-   
+end      
+
+fun {SubstTheta Expr Thetas}
+   case Thetas of
+      Theta1|ThetasNext then
+      ExprTheta in
+      ExprTheta = {Subst Expr Theta1}
+      {SetUnion
+       {SetDifference
+	ExprTheta
+	{SetIntersection Expr ExprTheta}
+       }
+       {SubstTheta Expr ThetasNext}
+      }
+   [] nil then nil
+   end
 end
+
+	
+% fun {Subst2 Expr S}
+%    % Same as Subst2, with the exception
+%    % that S is a list of substitutions.
+%    case S of
+%       H|T then
+%       {Subst2 {Subst Expr H} T}
+%    []
+%       P#Q then
+%       {Substitute Expr P Q}
+%    else
+%       Expr
+%    end
+% end
+
+
+%fun {SubstSet Expr S}
+   
+
+fun {SubstList Expr S}
+   % Same as above, but does not recurse.
+   case Expr of
+      nil then nil
+   []
+      H|T then
+      {Subst2 H S}|{SubstList T S}
+   end
+end
+
+ 
+       
+
 
 
 proc {BeginsWithUppercase A ?B}
@@ -376,7 +451,25 @@ class RCL from BaseObject
       end
    end
    
-
+   meth newClause(H B C)
+      if H == nil andthen B == nil then
+	 C = nil
+      elseif H == nil then
+	 C = {List.append ':-'|nil
+	      {ListInfix B ','}
+	     }
+      elseif B == nil then
+	 C = {ListInfix H ';'}
+      else
+	 C = {List.append
+	      {List.append
+	       {ListInfix H ';'}
+	       ':-'|nil
+	      }
+	      {ListInfix B ','}
+	     }
+      end
+   end
    meth splitClause(C Head Body)
       case C of [H] then Head=[H] Body=nil
       []
@@ -596,6 +689,29 @@ class RCL from BaseObject
 		      }
    end
 
+   meth getVariablesFromAtom(Atom Varlist)
+      % Returns all variables from an atom
+      % in varlist.
+
+      if {self isAtom(Atom $)} then
+	 Varlist = {Record.toList {Record.filter
+				   Atom
+				   fun {$ T}
+				      {self isVariable(T $)}
+				   end
+				  }}
+	 else
+	    Varlist = nil
+      end
+      
+      
+   end
+   
+   
+   
+   
+      
+
    meth getVariablesFromClause(Clause Varlist)
       % Returns all the variables from a clause
       % Clause in Varlist.
@@ -721,6 +837,543 @@ class RCL from BaseObject
 		end
 	       }
    end
+
+   meth isMoreGeneralSubstitution(Substitution1 Substitution2 B)
+      proc {GetTermsFromSubstList SubstList Variables Constants}
+	 NewVars NewConsts in
+	 {Cell.new nil NewVars}
+	 {Cell.new nil NewConsts}
+	 
+	 for I in SubstList do
+	    case I of nil then skip
+	       
+	    []
+	
+	       S1#S2 then
+	       for S in [S1 S2] do
+		  if {self isVariable(S $)} then
+		     NewVars := {List.append @NewVars S|nil}
+		  elseif {self isConstant(S $)} then
+		     NewConsts := {List.append @NewConsts S|nil}
+		  end
+	       end
+	    end
+	 end
+	 Variables = @NewVars
+	 Constants = @NewConsts
+      end
+      
+      Vars1 Consts1 Vars2 Consts2 Hu SS1 SS2 in
+
+
+      {GetTermsFromSubstList Substitution1 Vars1 Consts1}
+      {GetTermsFromSubstList Substitution2 Vars2 Consts2}
+
+      Hu = {SetUnion Consts1 Consts2}
+      SS1={SearchAll
+	   proc {$ Sol}
+	      Sol = {List.map
+		     Vars1
+		     fun {$ X}
+			X#{ChoiceFromList {List.append Hu Vars2}}
+		     end
+		    }
+	      {SetDifference {Subst2 Substitution1 Sol} Substitution2} = nil
+	   end
+	  }
+      SS2={SearchAll
+	   proc {$ Sol}
+	      Sol = {List.map
+		     Vars2
+		     fun {$ X}
+			X#{ChoiceFromList {List.append Hu Vars1}}
+		     end
+		    }
+	      {SetDifference {Subst2 Substitution2 Sol} Substitution1} = nil
+	   end
+	  }
+
+     
+     
+      if {List.length SS1} > {List.length SS2} then
+	 B = true
+      else
+	 B = false
+      end
+      
+			 
+			
+
+      
+      % SS1 = {List.map Substitution1
+      % 	     fun {$ I}
+      % 		F S in
+      % 		I = F#S
+      % 		subst(F S)
+      % 	     end
+      % 	    }
+
+      % SS2 = {List.map Substitution2
+      % 	     fun {$ I}
+      % 		F S in
+      % 		I = F#S
+      % 		subst(F S)
+      % 	     end
+      % 	    }
+      % B = [SS1 SS2]
+  %    B = {self getUnificationSubstitutions(SS1 SS2 $)}
+      
+   end
+
+   meth areUnifiable(Atom1 Atom2 B)
+      if {self getUnificationSubstitutions(Atom1 Atom2 $)} \= nil then
+	 B = true
+      else
+	 B = false
+      end
+      
+
+   end
+
+   meth getMostGeneralUnifier(Atom1 Atom2 B)
+      Subs I in
+      Subs = {self getUnificationSubstitutions(Atom1 Atom2 $)}
+     
+      I = {List.sort Subs fun {$ I J}
+			     {self isMoreGeneralSubstitution(I J $)} end}
+      if {List.is I} andthen I\=nil then
+	 B = I.1
+      else
+	 B = nil
+      end
+   end
+   meth negateClause(C NCl)
+      % Negates a clause. NCl is the list
+      % of produced clauses.
+
+      H B NCl2 in
+      {NewCell nil NCl2}
+      
+      {self splitClause(C H B)}
+      for E in H do
+	 NCl2 := {List.append @NCl2 [[':-' E]]}
+      end
+
+      for E in B do
+	 NCl2 := {List.append @NCl2 [[E]]}
+      end
+      
+      NCl = @NCl2
+   end
+   meth resolve(Clause1 Clause2 ClauseOut)
+      Head1
+      Body1
+      Head2
+      Body2
+      Head3
+      Body3
+      Clause3
+      S
+      MGU 
+   in
+      {self splitClause(Clause1 Head1 Body1)}
+      {self splitClause(Clause2 Head2 Body2)}
+
+      S = {SearchOne
+	   proc {$ Sol}
+	      L1 L2 MGU in
+	      choice
+		 L1 = {ChoiceFromList Head1}
+		 L2 = {ChoiceFromList Body2}
+	      []
+		 L2 = {ChoiceFromList Body1}
+		 L1 = {ChoiceFromList Head2}
+	      end
+	      
+		 MGU = {self getMostGeneralUnifier(L1 L2 $)}
+		 if MGU\=nil then
+		    Sol = unify(L1 L2 MGU)
+		
+		 else
+		    fail
+		 end
+	%      MGU = Sol
+	      
+	  end
+	  }
+      
+      if S\=nil then
+	 MGU = S.1.3
+	 Head3 = {SetDifference
+		  {SetUnion
+		   {List.map
+		    Head1
+		    fun {$ I}
+		       {self substituteAtom(I MGU $)}
+		    end
+		   }
+		   {List.map
+		    Head2
+		    fun {$ I}
+		       {self substituteAtom(I MGU $)}
+		    end
+		   }
+		  }
+		  [{self substituteAtom(S.1.1 S.1.3 $)}]
+		 }
+	 Body3 = {SetDifference
+		  {SetUnion
+		   {List.map
+		    Body1
+		    fun {$ I}
+		       {self substituteAtom(I MGU $)}
+		    end
+		   }
+		   {List.map
+		    Body2
+		    fun {$ I}
+		       {self substituteAtom(I MGU $)}
+		    end
+		   }
+		  }
+		  [{self substituteAtom(S.1.1 S.1.3 $)}]
+		 }
+	 
+	 ClauseOut = {self newClause(Head3 Body3 $)}
+	 
+      else
+	 ClauseOut = nil
+      end
+      
+   end
+   
+ 
+   meth substituteAtom(Atom Substitution AtomOut)
+      AtomOut = {Record.map
+		 Atom
+		 proc {$ I Out}
+		    for J in Substitution break:B do
+		       X Y in
+		       J = X#Y
+		       if X == I then
+			  Out = Y
+			  
+		       end
+		       
+		    end
+		    try Out = I
+		    catch _ then skip
+		    end
+		    
+		 end
+		 }
+			  
+   end
+
+   
+   
+
+   meth getUnificationSubstitutions(Atom1 Atom2 Substitutions)
+      VarList1
+      VarList2
+      Hu
+      SubstitutionChoiceList
+   in
+      VarList1 = {self getVariablesFromAtom(Atom1 $)}
+      VarList2 = {self getVariablesFromAtom(Atom2 $)}
+      Hu = {self herbrandUniverse([[Atom1] [Atom2]] $)}
+      SubstitutionChoiceList = {SetUnion
+				VarList1
+				{SetUnion
+				 VarList2
+				 Hu
+				}
+			       }
+      Substitutions = {SearchAll
+		       proc {$ Sol}
+			  Sol2 Sol3 Sol4 in
+			  Sol2 = {Record.map
+				 Atom1
+				  proc {$ X I}
+				     if {self isVariable(X $)} then
+					I = {ChoiceFromList
+					     SubstitutionChoiceList}
+				     else
+					I = X
+				     end
+				 end
+				}
+			  Sol2 = {Record.map
+				 Atom2
+				 proc {$ X I}
+				     if {self isVariable(X $)} then
+					I = {ChoiceFromList
+					     SubstitutionChoiceList}
+				     else
+					I = X
+				     end
+				 end
+				 }
+			  Sol3 = {Record.zip
+				 Atom1
+				 Sol2
+				  fun {$ X Y}
+				     if X\=Y andthen {self isVariable(X $)} then
+					X#Y
+				     else
+					nil
+				     end
+				     
+				 end
+				 }
+			  Sol4 = {Record.zip
+				 Atom2
+				 Sol2
+				  fun {$ X Y}
+				     if X\=Y andthen {self isVariable(X $)} then
+					X#Y
+				     else
+					nil
+				     end
+				     
+				 end
+				 }
+			  Sol = {SetUnion
+				 {List.filter
+				  {Record.toList Sol3}
+				  fun {$ F} F\= nil end
+				 }
+				 {List.filter
+				  {Record.toList Sol4}
+				  fun {$ F} F\= nil end
+				 }
+				 
+				}
+			  
+		       end
+		       
+		       }
+		       
+      
+      
+   end
+     meth prove(Program C B)
+	proc {ResolveH L Ci Pnew ?B COUT}
+	   
+	 for Cj in Pnew break:Break continue:Continue do
+	    Ck Hi Hj Bi Bj in
+	    {self splitClause(Ci Hi Bi)}
+	    {self splitClause(Cj Hj Bj)}
+	    {self resolve(Ci Cj Ck)}
+%	    {Browse L#resolve(Ci Cj Ck)}
+	     
+
+	    if Ck == nil then
+	       B = true
+	      % COUT = [Ci Cj Ck]
+	       {Break}
+	   % elseif
+	    %   Ck == {@Grammar newClause(
+	%			  {SetUnion Hi Hj}
+	%			  {SetUnion Bi Bj}
+	%			  $
+	%			  )}
+	 %      
+	  %  then
+	      % B = false
+	   %    {Continue}
+	    else
+	       B = {ResolveH L+1 Ck Pnew $ COUT}
+	    end
+	 end
+	 try
+	    B = failed_to_apply_resolution(Ci)
+	 catch _ then skip
+	 end
+	 
+      end
+
+      Cneg = {self negateClause(C $)}
+      Pnew = {SetUnion
+	      Program
+	      Cneg
+	     }
+      COUT
+   in
+      for Ci in Cneg do
+	 if {ResolveH 1 Ci Pnew  $ COUT} \= true then
+	    B = false
+	 end
+      end
+
+      try B=true
+      catch _ then skip end
+      
+   end
+   %  meth prove(P C Out)
+   %    Cneg
+   %    Pnew
+   % in
+   %    Cneg = {self negateClause(C $)}
+   %    Pnew = {SetUnion P Cneg}
+   %     Out =
+   %     {SearchAll
+
+   % 	end
+   % 	}
+
+       
+      
+   % end  
+
+%    meth getUnificationSubstitutions(Atom1 Atom2 Substitutions)
+%       VarList1 % List of variables in atom Atom1
+%       VarList2 % List of variables in atom Atom2
+%       Hu       % Herbrand universe of Atom1 and Atom2
+%    in
+%       VarList1 = {self getVariablesFromAtom(Atom1 $)}
+%       VarList2 = {self getVariablesFromAtom(Atom2 $)}
+%       Hu = {self herbrandUniverse([[Atom1] [Atom2]] $)}
+
+%       Substitutions =
+%       {SearchAll
+%       proc {$ Sol}
+% % 	  Sol1
+% % 	  Sol2
+% %        in
+% 	 Sol = {List.map
+% 		{SetUnion VarList1 VarList2}
+% 		fun {$ X}
+% 		   X#{ChoiceFromList
+% 			{List.append
+% 			 Hu
+% 			 {SetUnion VarList1 VarList2}
+% 			}
+% 		       }
+% 		end
+% 	       }
+% 	 {SubstTheta Atom1 Sol} = {SubstTheta Atom2 Sol}
+%       end
+%       }
+% % 	  Sol1 = {List.map
+% % 		 VarList1
+% % 		 fun {$ X}
+% % 		    X2 in
+		    
+% % 		    X2 = {ChoiceFromList
+% % 		       {List.append
+% % 			Hu
+% % 			VarList2
+% % 		       }
+% % 			 }
+% % 		    if X2 \= X then
+% % 		       X#X2
+% % 		    else
+% % 		       fail
+% % 		    end	    
+% % 		 end
+% % 		 }
+% % %	  {Browse sol1#Sol1}
+% % 	  Sol2 = {List.map
+% % 		 VarList2
+% % 		 fun {$ X}
+% % 		    X2 in
+		    
+% % 		    X2 = {ChoiceFromList
+% % 		       {List.append
+% % 			Hu
+% % 			VarList1
+% % 		       }
+% % 			 }
+% % 		    if X2 \= X then
+% % 		       X#X2
+% % 		    else
+% % 		       fail
+% % 		    end	    
+% % 		 end
+% % 		 }
+% % %	  {Browse sol2#Sol2}
+% % 	  choice	  
+% % 	     {Subst2 Atom1 Sol1} = {Subst2 Atom2 Sol1}
+% % 	     Sol = Sol1
+% % 	  []
+% % 	     {Subst2 Atom1 Sol2} = {Subst2 Atom2 Sol2}
+% % 	     Sol = Sol2
+% % 	  []
+% % 	     S1 S2 in
+% % 	     Sol = {SetUnion Sol1 Sol2} 
+% % 	     {Subst2 Atom1 Sol} = S1
+% % 	     {Subst2 Atom2 Sol} = S2
+% % 	     S1 = S2
+% % 	     	     {Browse S1#S2}
+
+% % 	     %{Subst2 S1 Sol} = {Subst2 S2 Sol}
+	    
+	    	     
+
+% % 	  end
+	  
+% %	  Sol={SetUnion Sol1 Sol2}
+% %       end
+% %      }
+%    end
+   
+   
+  % meth getUnificationSubstitutions(Atom1 Atom2 B)
+      % B is a list of possible substitutions that
+      % can unify Atom1 and Atom2
+   %   VarList1 VarList2 Substitutions1 Substitutions2 Hu in
+
+  %    Hu = {self herbrandUniverse([[Atom1] [Atom2]] $)} %temporarily convert to clause heads
+                                                        %in order to get all the terms without
+                                                        %making a dedicated function to do so
+      
+  %    VarList1 = {self getVariablesFromAtom(Atom1 $)}
+  %    {Browse varlist1#VarList1}
+ %     VarList2 = {self getVariablesFromAtom(Atom2 $)}
+   %   {Browse varlist2#VarList2}
+    %  {Browse hu#Hu}
+
+      % Substitutions1 = {SearchAll
+      % 		proc {$ Sol}
+      % 		   Sol = {List.map VarList1 fun {$ X}
+      % 					       X#{ChoiceFromList {List.append Hu VarList2}}
+      % 					    end
+      % 			 }
+      % 	%	   {Browse [Atom1 Atom2 Sol {Subst2 Atom1 Sol}]}
+      % 		   {Subst2 Atom1 Sol}={Subst2 Atom2 Sol}
+		   
+      % 		end
+      % 	       }
+      % Substitutions2 = {SearchAll
+      % 		proc {$ Sol}
+      % 		   Sol = {List.map VarList2 fun {$ X}
+      % 					       X#{ChoiceFromList {List.append {List.append Hu VarList1}}
+      % 					    end
+      % 			 }
+      % 		   {Subst2 Atom2 Sol}={Subst2 Atom1 Sol}
+      % 		end
+      % 	       }
+      % B = [subst1(Substitutions1) subst2(Substitutions2)]
+%      if {SetUnion Subst1 Subst2}
+%      then
+%	 B = true
+%      else
+%	 B = false
+%      end
+ %  end
+   
+   meth isUnifier(Sigma Atom1 Atom2 B)
+      S1 S2 in
+      S1 = {self substituteOne([Atom1] Sigma $)}
+      S2 = {self substituteOne([Atom2] Sigma $)}
+      if S1 == S2 then
+	 B = true
+      else
+	 B = false
+      end
+   end
+   
    
    meth substituteOne(C S Out)
       % Implements substitution.
@@ -1186,6 +1839,8 @@ class KnowledgeBase from BaseObject
       
       
    end
+
+
    
   %  meth resolutionRule1(C1 C2 C3)
  %      H1 B1
@@ -1327,7 +1982,7 @@ class KnowledgeBase from BaseObject
    % 	       B = true
    % 	       {B0}
    % 	    end
-   % 	 end
+   % 	 endg
    %    end
 
    %    try
@@ -1461,6 +2116,15 @@ Program = [
 	  ]
 
 
+Expr = [a('X') b('Y') c('Z')]
+
+Pr = [
+ [likes(peter 'S') ':-' student_of('S' peter)]
+ [student_of('S' 'T') ':-' follows('S' 'C') ',' teaches('T' 'C')]
+ [teaches(peter decprog)]
+ [follows(maria decprog)]
+]
+
 
 in 
 {RCL1 splitClause(Clause H B)}
@@ -1480,4 +2144,50 @@ in
 {Browse {RCL1 isClauseModel(Clause [likes(peter maria) student_of(maria peter)] $)}}
 %{Browse {RCL1 clauseModels(Clause [Clause [student_of(maria peter)]] $)}}
 {Browse {RCL1 programModels(Program $)}}
-{Browse {RCL1 isProgramModel(Program [student_of(maria peter)] $)}}
+{Browse {RCL1 isProgramModel(Program Clause $)}}
+{Browse {RCL1 getVariablesFromAtom(maria(peter 'X' george 'Z' 'E') $)}}
+
+{Browse {RCL1 isUnifier(['X'#'3' 'Y'#'3'] note('X' '3') note('Y' '3') $)}}
+{Browse {RCL1 areUnifiable(note('X' 'Z' '4') note('Y' 'O' '3') $)}}
+{Browse {RCL1 getUnificationSubstitutions(p('X' b) p(a 'Y') $)}}
+{Browse {RCL1 getUnificationSubstitutions(q('X') q('Y') $)}}
+
+{Browse {RCL1 isMoreGeneralSubstitution(['X'#'Y'] ['X'#a 'Y'#a] $)}}
+{Browse {RCL1 getMostGeneralUnifier(p(a b) p(a c) $)}}
+{Browse {RCL1 substituteAtom(likes('X' 'Y') ['X'#john 'Y'#mary] $)}}
+{Browse {RCL1 resolve([':-' likes(peter 'N')] [likes(peter 'S') ':-' student_of('S' peter)] $)}}
+{Browse {RCL1 resolve([likes(peter 'S') ':-' student_of('S' peter)] [':-' likes(peter 'N')] $)}}
+{Browse {RCL1 resolve([':-' student_of('N' peter)] [student_of('S' 'T') ':-' follows('S' 'C') ',' teaches('T' 'C')] $)}}
+{Browse {RCL1 negateClause( [student_of('S' 'T') ':-' follows('S' 'C') ',' teaches('T' 'C')] $)}}
+{Browse {RCL1 prove(Pr [likes(peter 'N')] $)}}
+
+% {Browse {Subst2 ['X' 'Y' 'Z'] ['X'#'Y' 'Y'#3 'Z'#3]}}
+
+% {Browse expr#Expr}
+% {Browse exprTH1#{Subst Expr 'X'#'Y'}}
+% {Browse exprTH2#{Subst Expr 'Y'#'Z'}}
+% {Browse exprTH3#{Subst Expr 'Z'#'3'}}
+% {Browse {fun {$}
+% 	   ExprTH1 ExprTH2 ExprTH3 in
+% 	   ExprTH1 = {Subst Expr 'X'#'Y'}
+% 	   ExprTH2 = {Subst Expr 'Y'#'Z'}
+% 	   ExprTH3 = {Subst Expr 'Z'#'3'}
+% 	    {SetUnion
+% 	     {SetUnion
+	      
+% 	     {SetDifference
+% 	      ExprTH1
+% 	      {SetIntersection ExprTH1 Expr}}
+% 	     {SetDifference
+% 	      ExprTH2
+% 	      {SetIntersection ExprTH2 Expr}}
+% 	      }
+% 	     {SetDifference
+% 	      ExprTH3
+% 	      {SetIntersection ExprTH3 Expr}}}
+
+% 	end}
+% }
+
+% {Browse {SubstTheta Expr ['X'#'Y' 'Y'#'Z' 'Z'#'3']}}
+	     

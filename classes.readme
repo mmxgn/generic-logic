@@ -1,0 +1,62 @@
+Classes for the Expert System
+
+Lexical units in < and > are object of that class.
+
+Class <Functor>
+	label 	: oz atom
+	termList: [<term1> <term2> ... <termN>]
+	arity?
+	isGround?
+
+	getType?
+
+Class <Term>:
+	value :  <AppliedFunctor>
+		|<Variable>
+	isVariable?
+	isFunctor?
+	isGround?
+	
+	getType?
+
+class <Variable>:
+	label: oz string
+	domain: list of ground terms
+	
+	getType?
+
+class <Predicate>:
+	value: oz atom
+
+	getType?
+
+class <Atom>:
+	predicate: <Predicate>
+	termList : [<term1> <term2> ... <termN>]
+	arity?
+	isGround?
+	
+	getType?
+
+class <Clause>:
+	head: [<atom1> <atom2> ... <atomN>]
+	body: [<atom1> <atom2> ... <atomN>]
+	isGround?
+	getType?
+
+class <KnowledgeBase>:
+	listOfClauses: [<clause1> ... ]
+	listOfAtoms: [<atom1>#<arity1> ...]
+	listOfPredicates: [<predicate1>#<arity1> ... ]
+	listOfFunctors: [<functor1>#<arity1> ...]
+	assert()
+	assert_pretend()
+	retract()
+	bc_query()
+	fc_assert()
+	fc_assert_pretend()
+	fc_retract_pretend()
+
+	getType?
+
+

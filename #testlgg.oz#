@@ -513,26 +513,10 @@ fun {TestUnify A B }
    end
 end
 
-
-
    
 
 fun {Query KB Y}
-   {List.filter @KB
-    fun {$ I}
-       local X
-       in
-	  X = {NewCell Y}
-       {Browse testing#I}
-       case {TestUnify I @X}
-       of nil then
-	  {Browse I#' does not unify with '#X}
-	  false
-       [] J then true
-       end
-       end
-    end
-    }
+   
 end
 
 % fun {Query KB X}
