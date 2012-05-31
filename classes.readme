@@ -19,6 +19,9 @@ Class <Term>:
 	
 	getType?
 
+class <Domain>:
+	domain: list of elements
+	
 class <Variable>:
 	label: oz string
 	domain: list of ground terms
@@ -59,4 +62,9 @@ class <KnowledgeBase>:
 
 	getType?
 
+class <Unification>:
+	Unifier: Variable
+	Substitution: term 
+
+TODO: Unify, everything. 
 

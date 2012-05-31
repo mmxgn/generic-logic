@@ -7,8 +7,60 @@ declare
 %% Horn Clauses, eval() function
 %% PAL
 
+% http://lists.gforge.info.ucl.ac.be/pipermail/mozart-users/1999/000165.html
+   proc {Copy X Vs0 ?Vs ?Y}
+      if {IsDet X} then 
+	 if {IsNumber X} then
+	    Y = X
+	    Vs = Vs0
+	 elseif {IsRecord X} then
+	    {CopyRecord X Vs0 Vs Y}
+	 else
+	    raise error('Copy'(X Y)) end
+	 end
+      else
+	 {CopyVar X Vs0 Vs Y}
+      end
+   end
+   proc {CopyRecord R Vs ?Ws ?S}
+      As = {Arity R} in
+      S = {MakeRecord {Label R} As}
+      {CopyArgs R As Vs Ws S}
+   end
+   proc {CopyArgs R As Vs0 ?Vs ?S}
+      case As
+      of nil then Vs0 = Vs
+      [] A|Ar then
+	 Vs1 in
+	 {Copy R.A Vs0 Vs1 S.A}
+	 {CopyArgs R Ar Vs1 Vs S}
+      end
+   end
+   proc {CopyVar X Vs Ws ?Y}
+      case Vs
+      of nil then Ws = [(X#Y)]
+      [] (O#N)|Vr then
+	 Wr in
+	 if {System.eq X O} then
+	    Y = N
+	    Ws = Vs
+	 else
+	    Ws = (O#N)|Wr
+	    {CopyVar X Vr Wr Y}
+	 end
+      end
+   end
+   proc {CopyTerm X Y}
+      {Copy X nil _ Y}
+   end
 
 
+/*
+
+declare X 
+{Browse {CopyTerm f(X a  [X] X) $}}
+
+*/   
 
 % Switches all instances of P from list L, searches one level only.
 fun {RemoveAllFromList L P}
@@ -517,23 +569,36 @@ end
 
    
 
-fun {Query KB Y}
-   {List.filter @KB
-    fun {$ I}
-       local X
-       in
-	  X = {NewCell Y}
-       {Browse testing#I}
-       case {TestUnify I @X}
-       of nil then
-	  {Browse I#' does not unify with '#X}
-	  false
-       [] J then true
-       end
-       end
+% fun {Query KB Y}
+%    {List.filter @KB
+%     fun {$ I}
+%        local X
+%        in
+% 	  X = {NewCell @Y}
+% 	  {Browse {IsFree Y}}
+%        {Browse testing#I}
+%        case {TestUnify I @X}
+%        of nil then
+% 	  {Browse I#' does not unify with '#@X}
+% 	  false
+%        [] J then true
+%        end
+%        end
+%     end
+%     }
+% end
+
+fun {Query KB X}
+   X1 in
+   {CopyTerm X X1}
+   {SearchAll
+    proc {$ Sol}
+       Sol = {ChoiceFromList KB}
+       Sol = f(_ _)
     end
     }
 end
+
 
 % fun {Query KB X}
 %    {List.filter @KB
@@ -564,5 +629,5 @@ end
 
 
 {Browse {TestUnify f(1 f(1 2)) f(1 _)}}
-%{Browse {Query KB _}}
-
+{Browse {CopyTerm f(_ a [_] _) $}}
+{Browse query#{Query @KB a}}
